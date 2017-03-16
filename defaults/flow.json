@@ -1,669 +1,685 @@
 [
-  {
-    "id": "d1bec909.16fa28",
-    "type": "tab",
-    "label": "Simulation Dashboard"
-  },
-  {
-    "id": "b277953f.c77428",
-    "type": "ui_group",
-    "z": "d1bec909.16fa28",
-    "name": "Simulation-Dashboard",
-    "tab": "e60c1831.e389c8",
-    "disp": true,
-    "width": "20"
-  },
-  {
-    "id": "e60c1831.e389c8",
-    "type": "ui_tab",
-    "z": "d1bec909.16fa28",
-    "name": "Simulation",
-    "icon": "dashboard",
-    "order": 1
-  },
-  {
-    "id": "325e31ff.50d3ae",
-    "type": "function",
-    "z": "d1bec909.16fa28",
-    "name": "update flow context with device changes",
-    "func": "var simulation = flow.get(\"simulation\") || {};\nswitch (msg.topic) {\ncase \"deviceSchema\":\n\tif(Array.isArray(msg.payload)){\n\t\t//all schemas update on startup clean old context \n\t\tsimulation = {};\n\t}\n\telse{//single schema update while running\n\t\tmsg.payload = [msg.payload];\n\n\t}\n\t//update schemas\n\tfor (var i = 0; i < msg.payload.length; i++) {\n\t\tvar schema = msg.payload[i];\n\t\tsimulation[schema.deviceType] = {schema: schema, devices: {}};\n\t}\n\tbreak;\ncase \"deviceCreated\":\n\tvar device = {properties: msg.payload.properties, isOn: true};\n\t//set properties input types\n\tdevice.propertiesInput = {};\n\tfor(var k in device.properties){\n\t\tvar prpType = typeof(device.properties[k]);\n\t\tvar inputType = (prpType === \"number\") ? \"number\": (prpType === \"boolean\") ? \"checkbox\" : \"text\";\n\t\tdevice.propertiesInput[k] = inputType;\n\t}\n\tsimulation[msg.payload.deviceType].devices[msg.payload.deviceId] = device;\n\tbreak;\ncase \"deviceDeleted\":\n\tvar device = msg.payload;\n\tif(simulation[device.deviceType].devices[device.deviceId]){\n\t\tsimulation[device.deviceType].devices[device.deviceId].isOn = false;\n\t}\n\telse\n\t\treturn null; //device already deleted\n\tbreak;\ncase \"propertyChange\":\n\tvar device = msg.payload;\n\tvar changedProperty = device.changedProperty;\n\tsimulation[device.deviceType].devices[device.deviceId].properties[changedProperty.name] = changedProperty.newValue;\n\tbreak;\ndefault:\n\treturn null;\n}\nflow.set(\"simulation\", simulation);\nmsg.payload = simulation;\nreturn msg;\n",
-    "outputs": 1,
-    "noerr": 0,
-    "x": 732,
-    "y": 377.142822265625,
-    "wires": [
-      [
-        "7c579ef8.dda78"
-      ]
-    ]
-  },
-  {
-    "id": "a51d6e25.e7ab6",
-    "type": "ui_template",
-    "z": "d1bec909.16fa28",
-    "group": "b277953f.c77428",
-    "name": "Simulation Dashbaord",
-    "order": 0,
-    "width": "20",
-    "height": "9",
-    "format": "<link data-require=\"bootstrap-css@3.0.2\" data-semver=\"3.0.3\" rel=\"stylesheet\" href=\"//netdna.bootstrapcdn.com/bootstrap/3.0.3/css/bootstrap.min.css\" />\n<div ng-app=\"simulator\" >\n  <div>\n    <div  ng-repeat=\"(schemaName, data) in msg.payload\" >\n      <h2>{{data.schema.deviceType}}</h2>\n      <md-button background=\"#9ee3f900\" color=\"#fff0\" ng-init=\"instances=1\" ng-click='send({topic: \"createDevice\" , payload: {deviceType: data.schema.deviceType, instances: instances}})'>Create</md-button>\n      <label><input type=\"number\" name=\"input\" ng-model=\"instances\"\n        min=\"1\" max=\"99\" required> instance(s) of {{data.schema.deviceType}}</label>\n        <table class=\"table table-striped\">\n          <thead>\n            <tr>\n              <th>start\\stop</th>\n              <th>Id</th>\n              <th ng-repeat=\"property in data.schema.properties | orderBy : 'name'\">\n                {{ property }}\n              </th>\n              <th>delete device</th>\n            </tr>\n            <tbody >\n              <tr ng-repeat=\"(deviceId, device) in data.devices\" ng-model=\"data.devices[deviceId]\" id={{deviceId}}>\n                <td>\n                  <md-switch aria-label=\"stopDevice\" ng-model=\"device.isOn\" ng-change='send({topic: (!device.isOn) ? \"stopDevice\" : \"startDevice\" , payload: {deviceType: data.schema.deviceType, deviceId: deviceId, properties: device.properties}})'></md-switch>\n                </td>\n                <td>{{ deviceId }}</td>\n                <td ng-repeat=\"devPrp in data.schema.properties | orderBy : 'name'\" ng-init='editMode=false; editVal'>{{ device.properties[devPrp] }}\n                  <a href=\"#\" ng-show=\"device.isOn && device.properties[devPrp] !== undefined && editMode==false\" ng-click=\"editMode = true; editVal = device.properties[devPrp]\">\n                    <i class=\"fa fa-pencil-square-o\" aria-hidden=\"true\"></i>\n                  </a>\n                  <input ng-show='editMode && device.isOn && device.propertiesInput[devPrp] === \"text\"' type=\"text\" ng-model=\"editVal\" ng-value=\"editVal\">\n                  <input ng-show='editMode && device.isOn && device.propertiesInput[devPrp] === \"checkbox\"' type=\"checkbox\" ng-model=\"editVal\" ng-value=\"editVal\">\n                  <input ng-show='editMode && device.isOn && device.propertiesInput[devPrp] === \"number\"' type=\"number\" ng-model=\"editVal\" ng-value=\"editVal\">\n                  <a href=\"#\" ng-show=\"editMode && device.isOn\" ng-click=\n                  'payload={deviceType: data.schema.deviceType, deviceId: deviceId};\n                  payload[devPrp] = editVal;\n                  send({topic: \"changeProperty\", payload: payload}); editMode=false'>\n                  <i class=\"fa fa-floppy-o\" aria-hidden=\"true\"></i>\n                </a>\n                <a href=\"#\" ng-show=\"device.isOn && editMode\"ng-click=\"editMode=false\">\n                  <i class=\"fa fa-eraser\" aria-hidden=\"true\"></i>\n                </a>\n              </td>\n              <td>\n                <md-button  ng-click='send({topic: \"deleteDevice\", payload: {deviceType: data.schema.deviceType, deviceId: deviceId}})'>\n                  delete\n                  <ng-md-icon iconType===\"angular-material\" icon=\"delete_forever\"><svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\" width=\"24\" height=\"24\"> <path d=\"M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zm2.46-7.12l1.41-1.41L12 12.59l2.12-2.12 1.41 1.41L13.41 14l2.12 2.12-1.41 1.41L12 15.41l-2.12 2.12-1.41-1.41L10.59 14l-2.13-2.12zM15.5 4l-1-1h-5l-1 1H5v2h14V4z\"></path></svg></ng-md-icon>\n                </md-button>\n              </td>\n            </tr>\n          </tbody>\n        </table>\n      </div>\n    </div>\n  </div>\n",
-    "storeOutMessages": false,
-    "fwdInMessages": false,
-    "x": 357.92852783203125,
-    "y": 115.14286041259766,
-    "wires": [
-      [
-        "c4869a92.307c88"
-      ]
-    ]
-  },
-  {
-    "id": "c4869a92.307c88",
-    "type": "switch",
-    "z": "d1bec909.16fa28",
-    "name": "Switch cmd",
-    "property": "topic",
-    "propertyType": "msg",
-    "rules": [
-      {
-        "t": "eq",
-        "v": "createDevice",
-        "vt": "str"
-      },
-      {
-        "t": "eq",
-        "v": "deleteDevice",
-        "vt": "str"
-      },
-      {
-        "t": "eq",
-        "v": "startDevice",
-        "vt": "str"
-      },
-      {
-        "t": "eq",
-        "v": "stopDevice",
-        "vt": "str"
-      },
-      {
-        "t": "eq",
-        "v": "changeProperty",
-        "vt": "str"
-      }
-    ],
-    "checkall": "false",
-    "outputs": 5,
-    "x": 578.4285278320312,
-    "y": 116,
-    "wires": [
-      [
-        "6be7cdbe.f70fe4"
-      ],
-      [
-        "7428f81d.4e76e8"
-      ],
-      [
-        "8d4a46fb.387af8"
-      ],
-      [
-        "fa93567c.1ad798"
-      ],
-      [
-        "8d47718a.3d1d3"
-      ]
-    ]
-  },
-  {
-    "id": "13ba0411.fa2d6c",
-    "type": "function",
-    "z": "d1bec909.16fa28",
-    "name": "Generate ID",
-    "func": "var msgs = []\nfor(var i = 0; i < msg.payload.instances; i++){\n    var mac = Math.floor(Math.random() * 16).toString(16) +\n    Math.floor(Math.random() * 16).toString(16) +\n    Math.floor(Math.random() * 16).toString(16) +\n    Math.floor(Math.random() * 16).toString(16) +\n    Math.floor(Math.random() * 16).toString(16) +\n    Math.floor(Math.random() * 16).toString(16) +\n    Math.floor(Math.random() * 16).toString(16) +\n    Math.floor(Math.random() * 16).toString(16) +\n    Math.floor(Math.random() * 16).toString(16) +\n    Math.floor(Math.random() * 16).toString(16) +\n    Math.floor(Math.random() * 16).toString(16) +\n    Math.floor(Math.random() * 16).toString(16);\n    var macStr = mac[0].toUpperCase() + mac[1].toUpperCase() + mac[2].toUpperCase() + mac[3].toUpperCase() +\n    mac[4].toUpperCase() + mac[5].toUpperCase() + mac[6].toUpperCase() + mac[7].toUpperCase() +\n    mac[8].toUpperCase() + mac[9].toUpperCase() + mac[10].toUpperCase() + mac[11].toUpperCase();\n    msgs.push({deviceId: macStr, typeId: msg.payload.deviceType});\n}\nmsg.payload =msgs\nreturn msg;",
-    "outputs": 1,
-    "noerr": 0,
-    "x": 465.7142639160156,
-    "y": 548.1428833007812,
-    "wires": [
-      [
-        "8006593f.f5f0f8"
-      ]
-    ]
-  },
-  {
-    "id": "fa93567c.1ad798",
-    "type": "link out",
-    "z": "d1bec909.16fa28",
-    "name": "Simulator StopDevice",
-    "links": [
-      "cca86035.0ffa3",
-      "9c404f1e.45198",
-      "d5b82172.fb792",
-      "aaff7a1.96f8d88",
-      "8b040c35.4eb98",
-      "f0afb38d.c557c",
-      "18a493df.0c35ac",
-      "48b54775.b2ffa8"
-    ],
-    "x": 905.9999389648438,
-    "y": 236,
-    "wires": []
-  },
-  {
-    "id": "d685b256.f244f",
-    "type": "function",
-    "z": "d1bec909.16fa28",
-    "name": "Add Device to flow context",
-    "func": "if(msg.payload === null) return null;\n\nvar simulation = flow.get(\"simulation\") || {};\nvar newDevices = [];\nvar turnOnMsgs = [];\nfor(var i = 0; i < msg.payload.length; i++){\n    var resp = msg.payload[i];\n    if(!resp.deviceId){\n        node.error(\"error on register device\");\n    }\n    else{\n         var deviceId = resp.deviceId;\n         var deviceType = resp.typeId;\n         if(simulation[deviceType]){\n            simulation[deviceType].devices[deviceId] = {properties: {}, isOn: false};\n            newDevices.push({typeId: deviceType, deviceId: deviceId});\n            turnOnMsgs.push({payload: {deviceType: deviceType, deviceId: deviceId}});\n         }\n    }\n}\n\nflow.set(\"simulation\", simulation);\n//check if need to push changes to db\nmsg.payload = simulation; //message to the ui\nif(msg.updatedb !== false && newDevices.length > 0){\n    var pendingUpdates = flow.get(\"dbUpdates\") || {addDevices: [],deleteDevices: []};\n\tpendingUpdates.addDevices = pendingUpdates.addDevices.concat(newDevices);\n\tflow.set(\"dbUpdates\", pendingUpdates);\n}\nreturn [msg, turnOnMsgs];\n",
-    "outputs": "2",
-    "noerr": 0,
-    "x": 888.8571166992188,
-    "y": 558.1428833007812,
-    "wires": [
-      [
-        "7c579ef8.dda78"
-      ],
-      [
-        "8d4a46fb.387af8"
-      ]
-    ]
-  },
-  {
-    "id": "eae34e29.a9aae",
-    "type": "function",
-    "z": "d1bec909.16fa28",
-    "name": "Delete Device from flow context",
-    "func": "var simulation = flow.get(\"simulation\") || {};\nvar deviceId = msg.payload.deviceId;\nvar deviceType = msg.payload.deviceType;\ndelete simulation[deviceType].devices[deviceId];\nflow.set(\"simulation\", simulation);\nvar uiMsg = {payload: simulation};\nvar closeDeviceMsg = {payload: {deviceType: deviceType, deviceId: deviceId}};\n\nif(msg.updatedb !== false){\n    var pendingUpdates = flow.get(\"dbUpdates\") || {addDevices: [],deleteDevices: []};\n\tpendingUpdates.deleteDevices.push({typeId: deviceType, deviceId: deviceId});\n\tflow.set(\"dbUpdates\", pendingUpdates);\n}\n\nreturn [closeDeviceMsg,uiMsg];",
-    "outputs": "2",
-    "noerr": 0,
-    "x": 539.0713195800781,
-    "y": 489.14288330078125,
-    "wires": [
-      [
-        "fa93567c.1ad798"
-      ],
-      [
-        "7c579ef8.dda78"
-      ]
-    ]
-  },
-  {
-    "id": "8d4a46fb.387af8",
-    "type": "link out",
-    "z": "d1bec909.16fa28",
-    "name": "Simulator StartDevice",
-    "links": [
-      "8f91e3a6.1b6fe",
-      "39620351.b34c7c",
-      "a989e259.87d89",
-      "1868095c.fd06d7",
-      "99a30096.aeefd",
-      "df2a484f.8672a8",
-      "68ef6fac.d3c95",
-      "ccf54a54.1076b8"
-    ],
-    "x": 896.7142333984375,
-    "y": 165,
-    "wires": []
-  },
-  {
-    "id": "efd32d6f.7c6a",
-    "type": "comment",
-    "z": "d1bec909.16fa28",
-    "name": "StopDevice",
-    "info": "",
-    "x": 992.4999389648438,
-    "y": 236,
-    "wires": []
-  },
-  {
-    "id": "ff6b0737.407ce8",
-    "type": "comment",
-    "z": "d1bec909.16fa28",
-    "name": "StartDevice",
-    "info": "",
-    "x": 983.2142333984375,
-    "y": 165,
-    "wires": []
-  },
-  {
-    "id": "f1875242.da07c",
-    "type": "link in",
-    "z": "d1bec909.16fa28",
-    "name": "Simulation Dashboard Input",
-    "links": [
-      "7c579ef8.dda78"
-    ],
-    "x": 153.92852783203125,
-    "y": 115,
-    "wires": [
-      [
-        "a51d6e25.e7ab6"
-      ]
-    ]
-  },
-  {
-    "id": "7c579ef8.dda78",
-    "type": "link out",
-    "z": "d1bec909.16fa28",
-    "name": "",
-    "links": [
-      "f1875242.da07c"
-    ],
-    "x": 985.857177734375,
-    "y": 488.85711669921875,
-    "wires": []
-  },
-  {
-    "id": "8d47718a.3d1d3",
-    "type": "set properties",
-    "z": "d1bec909.16fa28",
-    "deviceId": "",
-    "schema": "",
-    "name": "",
-    "propAll": true,
-    "valueType": "msg",
-    "value": "",
-    "x": 1030.142822265625,
-    "y": 301.4285583496094,
-    "wires": [
-      []
-    ]
-  },
-  {
-    "id": "17028df7.b414b2",
-    "type": "device listener",
-    "z": "d1bec909.16fa28",
-    "monitor": "stop",
-    "monitorAll": true,
-    "deviceId": "",
-    "allDeviceIds": true,
-    "allSchemas": true,
-    "allProps": true,
-    "schema": "",
-    "props": [],
-    "name": "",
-    "x": 436.2856750488281,
-    "y": 375.42852783203125,
-    "wires": [
-      [
-        "325e31ff.50d3ae"
-      ]
-    ]
-  },
-  {
-    "id": "6be7cdbe.f70fe4",
-    "type": "link out",
-    "z": "d1bec909.16fa28",
-    "name": "Register Device -  out",
-    "links": [
-      "e50ebf27.03b5"
-    ],
-    "x": 897.8571166992188,
-    "y": 45.142852783203125,
-    "wires": []
-  },
-  {
-    "id": "ccb08af5.a8b788",
-    "type": "comment",
-    "z": "d1bec909.16fa28",
-    "name": "Register Device",
-    "info": "",
-    "x": 994.8571166992188,
-    "y": 45.142852783203125,
-    "wires": []
-  },
-  {
-    "id": "7428f81d.4e76e8",
-    "type": "link out",
-    "z": "d1bec909.16fa28",
-    "name": "Unregister Device out",
-    "links": [
-      "c69b4588.ef7b58"
-    ],
-    "x": 896.7857055664062,
-    "y": 109.71427917480469,
-    "wires": []
-  },
-  {
-    "id": "59ffa357.f0f69c",
-    "type": "comment",
-    "z": "d1bec909.16fa28",
-    "name": "Unregister Device",
-    "info": "",
-    "x": 1006.7857055664062,
-    "y": 109.71427917480469,
-    "wires": []
-  },
-  {
-    "id": "4b50c63f.c55858",
-    "type": "comment",
-    "z": "d1bec909.16fa28",
-    "name": "Register Device",
-    "info": "",
-    "x": 251.21424865722656,
-    "y": 549.1428833007812,
-    "wires": []
-  },
-  {
-    "id": "e50ebf27.03b5",
-    "type": "link in",
-    "z": "d1bec909.16fa28",
-    "name": "Registing device - in",
-    "links": [
-      "6be7cdbe.f70fe4"
-    ],
-    "x": 346.7856750488281,
-    "y": 548.1428833007812,
-    "wires": [
-      [
-        "13ba0411.fa2d6c"
-      ]
-    ]
-  },
-  {
-    "id": "e99ea868.a99468",
-    "type": "comment",
-    "z": "d1bec909.16fa28",
-    "name": "Unregister Device",
-    "info": "",
-    "x": 265.9284973144531,
-    "y": 441.4285583496094,
-    "wires": []
-  },
-  {
-    "id": "c69b4588.ef7b58",
-    "type": "link in",
-    "z": "d1bec909.16fa28",
-    "name": "Unregister Device - in",
-    "links": [
-      "7428f81d.4e76e8"
-    ],
-    "x": 373.78565979003906,
-    "y": 441.857177734375,
-    "wires": [
-      [
-        "eae34e29.a9aae",
-        "dfd224da.ebcf68"
-      ]
-    ]
-  },
-  {
-    "id": "f163562b.ee48e8",
-    "type": "comment",
-    "z": "d1bec909.16fa28",
-    "name": "Dashboard Input",
-    "info": "",
-    "x": 1082.6428833007812,
-    "y": 487.5714111328125,
-    "wires": []
-  },
-  {
-    "id": "5d64ea69.1eebb4",
-    "type": "function",
-    "z": "d1bec909.16fa28",
-    "name": "start DB update",
-    "func": "var pendingUpdates = flow.get(\"dbUpdates\");\nif(!pendingUpdates || (pendingUpdates.addDevices.length === 0 && pendingUpdates.deleteDevices.length === 0)  ) \nreturn [msg,null];\n//load changes on msg\nmsg.addDevices = pendingUpdates.addDevices;\nmsg.deleteDevices = pendingUpdates.deleteDevices;\n//set doc id\nmsg.payload =  {_id: \"registeredDevices\"}\n\n//rest flow pending changes\npendingUpdates.addDevices = [];\npendingUpdates.deleteDevices = [];\nflow.set(\"dbUpdates\",pendingUpdates);\nreturn [msg,msg];",
-    "outputs": "2",
-    "noerr": 0,
-    "x": 315.92852783203125,
-    "y": 828,
-    "wires": [
-      [
-        "12ee29cc.614196"
-      ],
-      [
-        "cfbddd46.22e7a"
-      ]
-    ]
-  },
-  {
-    "id": "cfbddd46.22e7a",
-    "type": "cloudant in",
-    "z": "d1bec909.16fa28",
-    "name": "Get reg devices from db",
-    "cloudant": "",
-    "database": "redsimulation-db",
-    "service": "cloudantNoSQLDB",
-    "search": "_id_",
-    "design": "",
-    "index": "",
-    "x": 559.9285278320312,
-    "y": 794,
-    "wires": [
-      [
-        "95c67d51.eb51c"
-      ]
-    ]
-  },
-  {
-    "id": "918df4be.db7e88",
-    "type": "cloudant out",
-    "z": "d1bec909.16fa28",
-    "name": "Update reg devices in db",
-    "cloudant": "",
-    "database": "redsimulation-db",
-    "service": "cloudantNoSQLDB",
-    "payonly": true,
-    "operation": "insert",
-    "x": 924.9285278320312,
-    "y": 882,
-    "wires": []
-  },
-  {
-    "id": "cee303ec.3fe43",
-    "type": "comment",
-    "z": "d1bec909.16fa28",
-    "name": "On Device Change",
-    "info": "",
-    "x": 260.9285583496094,
-    "y": 375,
-    "wires": []
-  },
-  {
-    "id": "31001fdd.40db2",
-    "type": "inject",
-    "z": "d1bec909.16fa28",
-    "name": "Start db sync",
-    "topic": "",
-    "payload": "{\"_id\": \"registeredDevices\"}",
-    "payloadType": "json",
-    "repeat": "",
-    "crontab": "",
-    "once": true,
-    "x": 256.92852783203125,
-    "y": 695,
-    "wires": [
-      [
-        "12ee29cc.614196",
-        "79446672.6468f8"
-      ]
-    ]
-  },
-  {
-    "id": "2c511e1e.fd4d62",
-    "type": "cloudant in",
-    "z": "d1bec909.16fa28",
-    "name": "Get reg devices from db",
-    "cloudant": "",
-    "database": "redsimulation-db",
-    "service": "cloudantNoSQLDB",
-    "search": "_id_",
-    "design": "",
-    "index": "",
-    "x": 642.9285278320312,
-    "y": 700,
-    "wires": [
-      [
-        "e113e438.610a48"
-      ]
-    ]
-  },
-  {
-    "id": "e113e438.610a48",
-    "type": "change",
-    "z": "d1bec909.16fa28",
-    "name": "",
-    "rules": [
-      {
-        "t": "move",
-        "p": "payload.devices",
-        "pt": "msg",
-        "to": "payload",
-        "tot": "msg"
-      },
-      {
-        "t": "set",
-        "p": "updatedb",
-        "pt": "msg",
-        "to": "false",
-        "tot": "bool"
-      }
-    ],
-    "action": "",
-    "property": "",
-    "from": "",
-    "to": "",
-    "reg": false,
-    "x": 875.4285278320312,
-    "y": 701,
-    "wires": [
-      [
-        "d685b256.f244f"
-      ]
-    ]
-  },
-  {
-    "id": "12ee29cc.614196",
-    "type": "delay",
-    "z": "d1bec909.16fa28",
-    "name": "",
-    "pauseType": "delay",
-    "timeout": "10",
-    "timeoutUnits": "seconds",
-    "rate": "1",
-    "rateUnits": "second",
-    "randomFirst": "1",
-    "randomLast": "5",
-    "randomUnits": "seconds",
-    "drop": false,
-    "x": 311.42852783203125,
-    "y": 754,
-    "wires": [
-      [
-        "5d64ea69.1eebb4"
-      ]
-    ]
-  },
-  {
-    "id": "95c67d51.eb51c",
-    "type": "function",
-    "z": "d1bec909.16fa28",
-    "name": "write devices to db",
-    "func": "var doc = msg.payload || {_id: \"registeredDevices\", devices: []};\nif(msg.addDevices){\n\tdoc.devices = doc.devices.concat(msg.addDevices);\n}\nif(msg.deleteDevices){  \n\tfor (var i = 0; i < msg.deleteDevices.length; i++) {\n\t\tvar deviceType = msg.deleteDevices[i].deviceType;\n\t\tvar deviceId = msg.deleteDevices[i].deviceId;\n\t\tvar index = doc.devices.findIndex(function(item){return item.deviceId === deviceId;});\n\t\tif(index !== -1){\n\t\t    doc.devices.splice(index, 1);\n\t\t}\n\t}\n}\nmsg.payload = doc;\nreturn msg;",
-    "outputs": 1,
-    "noerr": 0,
-    "x": 798.4285278320312,
-    "y": 836,
-    "wires": [
-      [
-        "918df4be.db7e88"
-      ]
-    ]
-  },
-  {
-    "id": "79446672.6468f8",
-    "type": "delay",
-    "z": "d1bec909.16fa28",
-    "name": "",
-    "pauseType": "delay",
-    "timeout": "3",
-    "timeoutUnits": "seconds",
-    "rate": "1",
-    "rateUnits": "second",
-    "randomFirst": "1",
-    "randomLast": "5",
-    "randomUnits": "seconds",
-    "drop": false,
-    "x": 439.92852783203125,
-    "y": 697,
-    "wires": [
-      [
-        "2c511e1e.fd4d62"
-      ]
-    ]
-  },
-  {
-    "id": "b3ec58ac.fd2e78",
-    "type": "comment",
-    "z": "d1bec909.16fa28",
-    "name": "README",
-    "info": "This flow implements an out of the box, generic\ndevice simulator, that can create, monitor \nand control virtual/simulated devices, whose behaviors\nare described as Node-RED flows using the Virtual_IoT_Device\nnode types.\n\n__There is no need to modify this flow in order to create and \nemulate virtual devices__\n\n## Connecting the simulator to device behavior flows\nTo connect a virtual device to the simulation dashboard, you need to connect the *__StartDevice__* and  *__StopDevice__* output links in the simulator flow to \nthe *__start virtual device__* and *__stop virtual device__* nodes in the device behavior flow (respectively)\n\n## Using the dashboard UI\nThe dashboard UI is part of the Node-RED application dashboard \nwhich is in _[application URL]/ui_.\nAfter opening the dashboard, select the _Simulation_ \npage (top left menu/side bar) to view the virtual devices dashboard.\nYou can create/delete multiple instances for every \ndevice type as well as view/change their property values.\nThe devices are auto generated in the IoT Platform using IDs \ngenerated by the dashboard. __However, the device types \nmust be registered in the IBM IoT Waston Platform \nprior to starting the simulation.__\n\n### Note:\nThe flow relies on the the CloudantNoSQL DB Service (deployed by default) to persist device instances between simulation sessions.\n\n\n\n",
-    "x": 527,
-    "y": 48,
-    "wires": []
-  },
-  {
-    "id": "3727977.69a9668",
-    "type": "comment",
-    "z": "d1bec909.16fa28",
-    "name": "Save registered devices to DB",
-    "info": "",
-    "x": 287,
-    "y": 657,
-    "wires": []
-  },
-  {
-    "id": "dfd224da.ebcf68",
-    "type": "device-manager",
-    "z": "d1bec909.16fa28",
-    "auth": "bluemix",
-    "name": "Delete Device",
-    "apiKey": "",
-    "deviceType": "",
-    "method": "Delete",
-    "deviceId": "",
-    "password": "",
-    "ignore": false,
-    "x": 518.5,
-    "y": 440,
-    "wires": [
-      []
-    ]
-  },
-  {
-    "id": "8006593f.f5f0f8",
-    "type": "device-manager",
-    "z": "d1bec909.16fa28",
-    "auth": "bluemix",
-    "name": "Create Device",
-    "apiKey": "",
-    "deviceType": "",
-    "method": "Create",
-    "deviceId": "",
-    "password": "",
-    "ignore": false,
-    "x": 652.5,
-    "y": 548,
-    "wires": [
-      [
-        "d685b256.f244f"
-      ]
-    ]
-  },
-  {
-    "id": "2ac6e0f4.c0129",
-    "type": "link in",
-    "z": "d1bec909.16fa28",
-    "name": "external create in",
-    "links": [
-      "d2e9a707.882728"
-    ],
-    "x": 493.5,
-    "y": 613,
-    "wires": [
-      [
-        "8006593f.f5f0f8"
-      ]
-    ]
-  }
+    {
+        "id": "1044921f.e283de",
+        "type": "tab",
+        "label": "Simulation Dashboard"
+    },
+    {
+        "id": "a159b455.1a33a8",
+        "type": "function",
+        "z": "1044921f.e283de",
+        "name": "update flow context with device changes",
+        "func": "var simulation = flow.get(\"simulation\") || {};\nswitch (msg.topic) {\ncase \"deviceSchema\":\n\tif(Array.isArray(msg.payload)){\n\t\t//all schemas update on startup clean old context \n\t\tsimulation = {};\n\t}\n\telse{//single schema update while running\n\t\tmsg.payload = [msg.payload];\n\n\t}\n\t//update schemas\n\tfor (var i = 0; i < msg.payload.length; i++) {\n\t\tvar schema = msg.payload[i];\n\t\tsimulation[schema.deviceType] = {schema: schema, devices: {}};\n\t}\n\tbreak;\ncase \"deviceCreated\":\n\tvar device = {properties: msg.payload.properties, isOn: true};\n\t//set properties input types\n\tdevice.propertiesInput = {};\n\tfor(var k in device.properties){\n\t\tvar prpType = typeof(device.properties[k]);\n\t\tvar inputType = (prpType === \"number\") ? \"number\": (prpType === \"boolean\") ? \"checkbox\" : \"text\";\n\t\tdevice.propertiesInput[k] = inputType;\n\t}\n\tsimulation[msg.payload.deviceType].devices[msg.payload.deviceId] = device;\n\tbreak;\ncase \"deviceDeleted\":\n\tvar device = msg.payload;\n\tif(simulation[device.deviceType].devices[device.deviceId]){\n\t\tsimulation[device.deviceType].devices[device.deviceId].isOn = false;\n\t}\n\telse\n\t\treturn null; //device already deleted\n\tbreak;\ncase \"propertyChange\":\n\tvar device = msg.payload;\n\tvar changedProperty = device.changedProperty;\n\tsimulation[device.deviceType].devices[device.deviceId].properties[changedProperty.name] = changedProperty.newValue;\n\tbreak;\ndefault:\n\treturn null;\n}\nflow.set(\"simulation\", simulation);\nmsg.payload = simulation;\nreturn msg;\n",
+        "outputs": 1,
+        "noerr": 0,
+        "x": 732,
+        "y": 377.142822265625,
+        "wires": [
+            [
+                "c053d47c.dfdc18",
+                "a5cf753f.b69258"
+            ]
+        ]
+    },
+    {
+        "id": "28a69f11.85e02",
+        "type": "ui_template",
+        "z": "1044921f.e283de",
+        "group": "d2a9dab2.5db438",
+        "name": "Simulation Dashbaord",
+        "order": 0,
+        "width": "20",
+        "height": "9",
+        "format": "<link data-require=\"bootstrap-css@3.0.2\" data-semver=\"3.0.3\" rel=\"stylesheet\" href=\"//netdna.bootstrapcdn.com/bootstrap/3.0.3/css/bootstrap.min.css\" />\n<div ng-app=\"simulator\" >\n  <div>\n    <div  ng-repeat=\"(schemaName, data) in msg.payload\" >\n      <h2>{{data.schema.deviceType}}</h2>\n      <md-button background=\"#9ee3f900\" color=\"#fff0\" ng-init=\"instances=1\" ng-click='send({topic: \"createDevice\" , payload: {deviceType: data.schema.deviceType, instances: instances}})'>Create</md-button>\n      <label><input type=\"number\" name=\"input\" ng-model=\"instances\"\n        min=\"1\" max=\"99\" required> instance(s) of {{data.schema.deviceType}}</label>\n        <table class=\"table table-striped\">\n          <thead>\n            <tr>\n              <th>start\\stop</th>\n              <th>Id</th>\n              <th ng-repeat=\"property in data.schema.properties | orderBy : 'name'\">\n                {{ property }}\n              </th>\n              <th>delete device</th>\n            </tr>\n            <tbody >\n              <tr ng-repeat=\"(deviceId, device) in data.devices\" ng-model=\"data.devices[deviceId]\" id={{deviceId}}>\n                <td>\n                  <md-switch aria-label=\"stopDevice\" ng-model=\"device.isOn\" ng-change='send({topic: (!device.isOn) ? \"stopDevice\" : \"startDevice\" , payload: {deviceType: data.schema.deviceType, deviceId: deviceId, properties: device.properties}})'></md-switch>\n                </td>\n                <td>{{ deviceId }}</td>\n                <td ng-repeat=\"devPrp in data.schema.properties | orderBy : 'name'\" ng-init='editMode=false; editVal'>{{ device.properties[devPrp] }}\n                  <a href=\"#\" ng-show=\"device.isOn && device.properties[devPrp] !== undefined && editMode==false\" ng-click=\"editMode = true; editVal = device.properties[devPrp]\">\n                    <i class=\"fa fa-pencil-square-o\" aria-hidden=\"true\"></i>\n                  </a>\n                  <input ng-show='editMode && device.isOn && device.propertiesInput[devPrp] === \"text\"' type=\"text\" ng-model=\"editVal\" ng-value=\"editVal\">\n                  <input ng-show='editMode && device.isOn && device.propertiesInput[devPrp] === \"checkbox\"' type=\"checkbox\" ng-model=\"editVal\" ng-value=\"editVal\">\n                  <input ng-show='editMode && device.isOn && device.propertiesInput[devPrp] === \"number\"' type=\"number\" ng-model=\"editVal\" ng-value=\"editVal\">\n                  <a href=\"#\" ng-show=\"editMode && device.isOn\" ng-click=\n                  'payload={deviceType: data.schema.deviceType, deviceId: deviceId};\n                  payload[devPrp] = editVal;\n                  send({topic: \"changeProperty\", payload: payload}); editMode=false'>\n                  <i class=\"fa fa-floppy-o\" aria-hidden=\"true\"></i>\n                </a>\n                <a href=\"#\" ng-show=\"device.isOn && editMode\"ng-click=\"editMode=false\">\n                  <i class=\"fa fa-eraser\" aria-hidden=\"true\"></i>\n                </a>\n              </td>\n              <td>\n                <md-button  ng-click='send({topic: \"deleteDevice\", payload: {deviceType: data.schema.deviceType, deviceId: deviceId}})'>\n                  delete\n                  <ng-md-icon iconType===\"angular-material\" icon=\"delete_forever\"><svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\" width=\"24\" height=\"24\"> <path d=\"M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zm2.46-7.12l1.41-1.41L12 12.59l2.12-2.12 1.41 1.41L13.41 14l2.12 2.12-1.41 1.41L12 15.41l-2.12 2.12-1.41-1.41L10.59 14l-2.13-2.12zM15.5 4l-1-1h-5l-1 1H5v2h14V4z\"></path></svg></ng-md-icon>\n                </md-button>\n              </td>\n            </tr>\n          </tbody>\n        </table>\n      </div>\n    </div>\n  </div>\n",
+        "storeOutMessages": false,
+        "fwdInMessages": false,
+        "x": 357.92852783203125,
+        "y": 115.14286041259766,
+        "wires": [
+            [
+                "9fa79bb5.95e6d8"
+            ]
+        ]
+    },
+    {
+        "id": "9fa79bb5.95e6d8",
+        "type": "switch",
+        "z": "1044921f.e283de",
+        "name": "Switch cmd",
+        "property": "topic",
+        "propertyType": "msg",
+        "rules": [
+            {
+                "t": "eq",
+                "v": "createDevice",
+                "vt": "str"
+            },
+            {
+                "t": "eq",
+                "v": "deleteDevice",
+                "vt": "str"
+            },
+            {
+                "t": "eq",
+                "v": "startDevice",
+                "vt": "str"
+            },
+            {
+                "t": "eq",
+                "v": "stopDevice",
+                "vt": "str"
+            },
+            {
+                "t": "eq",
+                "v": "changeProperty",
+                "vt": "str"
+            }
+        ],
+        "checkall": "false",
+        "outputs": 5,
+        "x": 578.4285278320312,
+        "y": 116,
+        "wires": [
+            [
+                "381620ba.77039"
+            ],
+            [
+                "2062a8cf.a1c9b8"
+            ],
+            [
+                "d302a0da.8e4d7"
+            ],
+            [
+                "1104fcb7.a369e3"
+            ],
+            [
+                "d7c8ce52.a158a"
+            ]
+        ]
+    },
+    {
+        "id": "fddae2a.7555d2",
+        "type": "function",
+        "z": "1044921f.e283de",
+        "name": "Generate ID",
+        "func": "var msgs = []\nfor(var i = 0; i < msg.payload.instances; i++){\n    var mac = Math.floor(Math.random() * 16).toString(16) +\n    Math.floor(Math.random() * 16).toString(16) +\n    Math.floor(Math.random() * 16).toString(16) +\n    Math.floor(Math.random() * 16).toString(16) +\n    Math.floor(Math.random() * 16).toString(16) +\n    Math.floor(Math.random() * 16).toString(16) +\n    Math.floor(Math.random() * 16).toString(16) +\n    Math.floor(Math.random() * 16).toString(16) +\n    Math.floor(Math.random() * 16).toString(16) +\n    Math.floor(Math.random() * 16).toString(16) +\n    Math.floor(Math.random() * 16).toString(16) +\n    Math.floor(Math.random() * 16).toString(16);\n    var macStr = mac[0].toUpperCase() + mac[1].toUpperCase() + mac[2].toUpperCase() + mac[3].toUpperCase() +\n    mac[4].toUpperCase() + mac[5].toUpperCase() + mac[6].toUpperCase() + mac[7].toUpperCase() +\n    mac[8].toUpperCase() + mac[9].toUpperCase() + mac[10].toUpperCase() + mac[11].toUpperCase();\n    msgs.push({deviceId: macStr, typeId: msg.payload.deviceType});\n}\nmsg.payload =msgs\nreturn msg;",
+        "outputs": 1,
+        "noerr": 0,
+        "x": 465.7142639160156,
+        "y": 548.1428833007812,
+        "wires": [
+            [
+                "4af54c13.d33ea4"
+            ]
+        ]
+    },
+    {
+        "id": "1104fcb7.a369e3",
+        "type": "link out",
+        "z": "1044921f.e283de",
+        "name": "Simulator StopDevice",
+        "links": [
+            "cca86035.0ffa3",
+            "9c404f1e.45198",
+            "d5b82172.fb792",
+            "aaff7a1.96f8d88",
+            "8b040c35.4eb98",
+            "f0afb38d.c557c",
+            "18a493df.0c35ac",
+            "48b54775.b2ffa8",
+            "183deeeb.c180e1"
+        ],
+        "x": 905.9999389648438,
+        "y": 236,
+        "wires": []
+    },
+    {
+        "id": "53b535a2.ff90ac",
+        "type": "function",
+        "z": "1044921f.e283de",
+        "name": "Add Device to flow context",
+        "func": "if(msg.payload === null) return null;\n\nvar simulation = flow.get(\"simulation\") || {};\nvar newDevices = [];\nvar turnOnMsgs = [];\nfor(var i = 0; i < msg.payload.length; i++){\n    var resp = msg.payload[i];\n    if(!resp.deviceId){\n        node.error(\"error on register device\");\n    }\n    else{\n         var deviceId = resp.deviceId;\n         var deviceType = resp.typeId;\n         if(simulation[deviceType]){\n            simulation[deviceType].devices[deviceId] = {properties: {}, isOn: false};\n            newDevices.push({typeId: deviceType, deviceId: deviceId});\n            turnOnMsgs.push({payload: {deviceType: deviceType, deviceId: deviceId}});\n         }\n    }\n}\n\nflow.set(\"simulation\", simulation);\n//check if need to push changes to db\nmsg.payload = simulation; //message to the ui\nif(msg.updatedb !== false && newDevices.length > 0){\n    var pendingUpdates = flow.get(\"dbUpdates\") || {addDevices: [],deleteDevices: []};\n\tpendingUpdates.addDevices = pendingUpdates.addDevices.concat(newDevices);\n\tflow.set(\"dbUpdates\", pendingUpdates);\n}\nreturn [msg, turnOnMsgs];\n",
+        "outputs": "2",
+        "noerr": 0,
+        "x": 888.8571166992188,
+        "y": 558.1428833007812,
+        "wires": [
+            [
+                "c053d47c.dfdc18"
+            ],
+            [
+                "d302a0da.8e4d7"
+            ]
+        ]
+    },
+    {
+        "id": "9d4dc132.d03bf",
+        "type": "function",
+        "z": "1044921f.e283de",
+        "name": "Delete Device from flow context",
+        "func": "var simulation = flow.get(\"simulation\") || {};\nvar deviceId = msg.payload.deviceId;\nvar deviceType = msg.payload.deviceType;\ndelete simulation[deviceType].devices[deviceId];\nflow.set(\"simulation\", simulation);\nvar uiMsg = {payload: simulation};\nvar closeDeviceMsg = {payload: {deviceType: deviceType, deviceId: deviceId}};\n\nif(msg.updatedb !== false){\n    var pendingUpdates = flow.get(\"dbUpdates\") || {addDevices: [],deleteDevices: []};\n\tpendingUpdates.deleteDevices.push({typeId: deviceType, deviceId: deviceId});\n\tflow.set(\"dbUpdates\", pendingUpdates);\n}\n\nreturn [closeDeviceMsg,uiMsg];",
+        "outputs": "2",
+        "noerr": 0,
+        "x": 539.0713195800781,
+        "y": 489.14288330078125,
+        "wires": [
+            [
+                "1104fcb7.a369e3"
+            ],
+            [
+                "c053d47c.dfdc18"
+            ]
+        ]
+    },
+    {
+        "id": "d302a0da.8e4d7",
+        "type": "link out",
+        "z": "1044921f.e283de",
+        "name": "Simulator StartDevice",
+        "links": [
+            "8f91e3a6.1b6fe",
+            "39620351.b34c7c",
+            "a989e259.87d89",
+            "1868095c.fd06d7",
+            "99a30096.aeefd",
+            "df2a484f.8672a8",
+            "68ef6fac.d3c95",
+            "ccf54a54.1076b8",
+            "8b3b25df.71bc48"
+        ],
+        "x": 896.7142333984375,
+        "y": 165,
+        "wires": []
+    },
+    {
+        "id": "574e1138.e624f",
+        "type": "comment",
+        "z": "1044921f.e283de",
+        "name": "StopDevice",
+        "info": "",
+        "x": 992.4999389648438,
+        "y": 236,
+        "wires": []
+    },
+    {
+        "id": "c3722581.b32a28",
+        "type": "comment",
+        "z": "1044921f.e283de",
+        "name": "StartDevice",
+        "info": "",
+        "x": 983.2142333984375,
+        "y": 165,
+        "wires": []
+    },
+    {
+        "id": "40241054.f0e93",
+        "type": "link in",
+        "z": "1044921f.e283de",
+        "name": "Simulation Dashboard Input",
+        "links": [
+            "c053d47c.dfdc18"
+        ],
+        "x": 153.92852783203125,
+        "y": 115,
+        "wires": [
+            [
+                "28a69f11.85e02"
+            ]
+        ]
+    },
+    {
+        "id": "c053d47c.dfdc18",
+        "type": "link out",
+        "z": "1044921f.e283de",
+        "name": "",
+        "links": [
+            "40241054.f0e93"
+        ],
+        "x": 985.857177734375,
+        "y": 488.85711669921875,
+        "wires": []
+    },
+    {
+        "id": "d7c8ce52.a158a",
+        "type": "set properties",
+        "z": "1044921f.e283de",
+        "deviceId": "",
+        "schema": "",
+        "name": "",
+        "propAll": true,
+        "valueType": "msg",
+        "value": "",
+        "x": 1030.142822265625,
+        "y": 301.4285583496094,
+        "wires": [
+            []
+        ]
+    },
+    {
+        "id": "b9db6dc5.d3f6a",
+        "type": "device listener",
+        "z": "1044921f.e283de",
+        "monitor": "stop",
+        "monitorAll": true,
+        "deviceId": "",
+        "allDeviceIds": true,
+        "allSchemas": true,
+        "allProps": true,
+        "schema": "",
+        "props": [],
+        "name": "",
+        "x": 436.2856750488281,
+        "y": 375.42852783203125,
+        "wires": [
+            [
+                "a159b455.1a33a8",
+                "a5cf753f.b69258"
+            ]
+        ]
+    },
+    {
+        "id": "381620ba.77039",
+        "type": "link out",
+        "z": "1044921f.e283de",
+        "name": "Register Device -  out",
+        "links": [
+            "c017c4a2.4f1d78"
+        ],
+        "x": 897.8571166992188,
+        "y": 45.142852783203125,
+        "wires": []
+    },
+    {
+        "id": "bcbd948c.da6d38",
+        "type": "comment",
+        "z": "1044921f.e283de",
+        "name": "Register Device",
+        "info": "",
+        "x": 994.8571166992188,
+        "y": 45.142852783203125,
+        "wires": []
+    },
+    {
+        "id": "2062a8cf.a1c9b8",
+        "type": "link out",
+        "z": "1044921f.e283de",
+        "name": "Unregister Device out",
+        "links": [
+            "76f2248b.491e5c"
+        ],
+        "x": 896.7857055664062,
+        "y": 109.71427917480469,
+        "wires": []
+    },
+    {
+        "id": "1f589a7c.f44616",
+        "type": "comment",
+        "z": "1044921f.e283de",
+        "name": "Unregister Device",
+        "info": "",
+        "x": 1006.7857055664062,
+        "y": 109.71427917480469,
+        "wires": []
+    },
+    {
+        "id": "114f6c6a.dbe2f4",
+        "type": "comment",
+        "z": "1044921f.e283de",
+        "name": "Register Device",
+        "info": "",
+        "x": 251.21424865722656,
+        "y": 549.1428833007812,
+        "wires": []
+    },
+    {
+        "id": "c017c4a2.4f1d78",
+        "type": "link in",
+        "z": "1044921f.e283de",
+        "name": "Registing device - in",
+        "links": [
+            "381620ba.77039"
+        ],
+        "x": 346.7856750488281,
+        "y": 548.1428833007812,
+        "wires": [
+            [
+                "fddae2a.7555d2"
+            ]
+        ]
+    },
+    {
+        "id": "77ad8972.3cc968",
+        "type": "comment",
+        "z": "1044921f.e283de",
+        "name": "Unregister Device",
+        "info": "",
+        "x": 265.9284973144531,
+        "y": 441.4285583496094,
+        "wires": []
+    },
+    {
+        "id": "76f2248b.491e5c",
+        "type": "link in",
+        "z": "1044921f.e283de",
+        "name": "Unregister Device - in",
+        "links": [
+            "2062a8cf.a1c9b8"
+        ],
+        "x": 373.78565979003906,
+        "y": 441.857177734375,
+        "wires": [
+            [
+                "9d4dc132.d03bf",
+                "70de84f8.abf83c"
+            ]
+        ]
+    },
+    {
+        "id": "3ed8058a.acaf0a",
+        "type": "comment",
+        "z": "1044921f.e283de",
+        "name": "Dashboard Input",
+        "info": "",
+        "x": 1082.6428833007812,
+        "y": 487.5714111328125,
+        "wires": []
+    },
+    {
+        "id": "9e943153.6a13b",
+        "type": "function",
+        "z": "1044921f.e283de",
+        "name": "start DB update",
+        "func": "var pendingUpdates = flow.get(\"dbUpdates\");\nif(!pendingUpdates || (pendingUpdates.addDevices.length === 0 && pendingUpdates.deleteDevices.length === 0)  ) \nreturn [msg,null];\n//load changes on msg\nmsg.addDevices = pendingUpdates.addDevices;\nmsg.deleteDevices = pendingUpdates.deleteDevices;\n//set doc id\nmsg.payload =  {_id: \"registeredDevices\"}\n\n//rest flow pending changes\npendingUpdates.addDevices = [];\npendingUpdates.deleteDevices = [];\nflow.set(\"dbUpdates\",pendingUpdates);\nreturn [msg,msg];",
+        "outputs": "2",
+        "noerr": 0,
+        "x": 315.92852783203125,
+        "y": 828,
+        "wires": [
+            [
+                "573d0aef.4a4a74"
+            ],
+            [
+                "60d933f5.0d008c"
+            ]
+        ]
+    },
+    {
+        "id": "60d933f5.0d008c",
+        "type": "cloudant in",
+        "z": "1044921f.e283de",
+        "name": "Get reg devices from db",
+        "cloudant": "",
+        "database": "redsimulation-db",
+        "service": "cloudantNoSQLDB",
+        "search": "_id_",
+        "design": "",
+        "index": "",
+        "x": 559.9285278320312,
+        "y": 794,
+        "wires": [
+            [
+                "f0cca5e8.d1e458"
+            ]
+        ]
+    },
+    {
+        "id": "f3426e65.804f9",
+        "type": "cloudant out",
+        "z": "1044921f.e283de",
+        "name": "Update reg devices in db",
+        "cloudant": "",
+        "database": "redsimulation-db",
+        "service": "cloudantNoSQLDB",
+        "payonly": true,
+        "operation": "insert",
+        "x": 924.9285278320312,
+        "y": 882,
+        "wires": []
+    },
+    {
+        "id": "98da0dd2.291ad",
+        "type": "comment",
+        "z": "1044921f.e283de",
+        "name": "On Device Change",
+        "info": "",
+        "x": 260.9285583496094,
+        "y": 375,
+        "wires": []
+    },
+    {
+        "id": "672ebd52.ec59e4",
+        "type": "inject",
+        "z": "1044921f.e283de",
+        "name": "Start db sync",
+        "topic": "",
+        "payload": "{\"_id\": \"registeredDevices\"}",
+        "payloadType": "json",
+        "repeat": "",
+        "crontab": "",
+        "once": true,
+        "x": 256.92852783203125,
+        "y": 695,
+        "wires": [
+            [
+                "573d0aef.4a4a74",
+                "b1c889d1.31d978"
+            ]
+        ]
+    },
+    {
+        "id": "582af00f.d485a",
+        "type": "cloudant in",
+        "z": "1044921f.e283de",
+        "name": "Get reg devices from db",
+        "cloudant": "",
+        "database": "redsimulation-db",
+        "service": "cloudantNoSQLDB",
+        "search": "_id_",
+        "design": "",
+        "index": "",
+        "x": 642.9285278320312,
+        "y": 700,
+        "wires": [
+            [
+                "3cb2d94a.380546"
+            ]
+        ]
+    },
+    {
+        "id": "3cb2d94a.380546",
+        "type": "change",
+        "z": "1044921f.e283de",
+        "name": "",
+        "rules": [
+            {
+                "t": "move",
+                "p": "payload.devices",
+                "pt": "msg",
+                "to": "payload",
+                "tot": "msg"
+            },
+            {
+                "t": "set",
+                "p": "updatedb",
+                "pt": "msg",
+                "to": "false",
+                "tot": "bool"
+            }
+        ],
+        "action": "",
+        "property": "",
+        "from": "",
+        "to": "",
+        "reg": false,
+        "x": 875.4285278320312,
+        "y": 701,
+        "wires": [
+            [
+                "53b535a2.ff90ac"
+            ]
+        ]
+    },
+    {
+        "id": "573d0aef.4a4a74",
+        "type": "delay",
+        "z": "1044921f.e283de",
+        "name": "",
+        "pauseType": "delay",
+        "timeout": "10",
+        "timeoutUnits": "seconds",
+        "rate": "1",
+        "rateUnits": "second",
+        "randomFirst": "1",
+        "randomLast": "5",
+        "randomUnits": "seconds",
+        "drop": false,
+        "x": 311.42852783203125,
+        "y": 754,
+        "wires": [
+            [
+                "9e943153.6a13b"
+            ]
+        ]
+    },
+    {
+        "id": "f0cca5e8.d1e458",
+        "type": "function",
+        "z": "1044921f.e283de",
+        "name": "write devices to db",
+        "func": "var doc = msg.payload || {_id: \"registeredDevices\", devices: []};\nif(msg.addDevices){\n\tdoc.devices = doc.devices.concat(msg.addDevices);\n}\nif(msg.deleteDevices){  \n\tfor (var i = 0; i < msg.deleteDevices.length; i++) {\n\t\tvar deviceType = msg.deleteDevices[i].deviceType;\n\t\tvar deviceId = msg.deleteDevices[i].deviceId;\n\t\tvar index = doc.devices.findIndex(function(item){return item.deviceId === deviceId;});\n\t\tif(index !== -1){\n\t\t    doc.devices.splice(index, 1);\n\t\t}\n\t}\n}\nmsg.payload = doc;\nreturn msg;",
+        "outputs": 1,
+        "noerr": 0,
+        "x": 798.4285278320312,
+        "y": 836,
+        "wires": [
+            [
+                "f3426e65.804f9"
+            ]
+        ]
+    },
+    {
+        "id": "b1c889d1.31d978",
+        "type": "delay",
+        "z": "1044921f.e283de",
+        "name": "",
+        "pauseType": "delay",
+        "timeout": "3",
+        "timeoutUnits": "seconds",
+        "rate": "1",
+        "rateUnits": "second",
+        "randomFirst": "1",
+        "randomLast": "5",
+        "randomUnits": "seconds",
+        "drop": false,
+        "x": 439.92852783203125,
+        "y": 697,
+        "wires": [
+            [
+                "582af00f.d485a"
+            ]
+        ]
+    },
+    {
+        "id": "fa2a5895.1b1e38",
+        "type": "comment",
+        "z": "1044921f.e283de",
+        "name": "README",
+        "info": "This flow implements an out of the box, generic\ndevice simulator, that can create, monitor \nand control virtual/simulated devices, whose behaviors\nare described as Node-RED flows using the Virtual_IoT_Device\nnode types.\n\n__There is no need to modify this flow in order to create and \nemulate virtual devices__\n\n## Connecting the simulator to device behavior flows\nTo connect a virtual device to the simulation dashboard, you need to connect the *__StartDevice__* and  *__StopDevice__* output links in the simulator flow to \nthe *__start virtual device__* and *__stop virtual device__* nodes in the device behavior flow (respectively)\n\n## Using the dashboard UI\nThe dashboard UI is part of the Node-RED application dashboard \nwhich is in _[application URL]/ui_.\nAfter opening the dashboard, select the _Simulation_ \npage (top left menu/side bar) to view the virtual devices dashboard.\nYou can create/delete multiple instances for every \ndevice type as well as view/change their property values.\nThe devices are auto generated in the IoT Platform using IDs \ngenerated by the dashboard. __However, the device types \nmust be registered in the IBM IoT Waston Platform \nprior to starting the simulation.__\n\n### Note:\nThe flow relies on the the CloudantNoSQL DB Service (deployed by default) to persist device instances between simulation sessions.\n\n\n\n",
+        "x": 527,
+        "y": 48,
+        "wires": []
+    },
+    {
+        "id": "24c53a7e.554b36",
+        "type": "comment",
+        "z": "1044921f.e283de",
+        "name": "Save registered devices to DB",
+        "info": "",
+        "x": 287,
+        "y": 657,
+        "wires": []
+    },
+    {
+        "id": "70de84f8.abf83c",
+        "type": "device-manager",
+        "z": "1044921f.e283de",
+        "auth": "bluemix",
+        "name": "Delete Device",
+        "apiKey": "",
+        "deviceType": "",
+        "method": "Delete",
+        "deviceId": "",
+        "password": "",
+        "ignore": false,
+        "x": 518.5,
+        "y": 440,
+        "wires": [
+            []
+        ]
+    },
+    {
+        "id": "4af54c13.d33ea4",
+        "type": "device-manager",
+        "z": "1044921f.e283de",
+        "auth": "bluemix",
+        "name": "Create Device",
+        "apiKey": "",
+        "deviceType": "",
+        "method": "Create",
+        "deviceId": "",
+        "password": "",
+        "ignore": false,
+        "x": 652.5,
+        "y": 548,
+        "wires": [
+            [
+                "53b535a2.ff90ac"
+            ]
+        ]
+    },
+    {
+        "id": "98552985.5071c8",
+        "type": "link in",
+        "z": "1044921f.e283de",
+        "name": "external create in",
+        "links": [
+            "d2e9a707.882728"
+        ],
+        "x": 493.5,
+        "y": 613,
+        "wires": [
+            [
+                "4af54c13.d33ea4"
+            ]
+        ]
+    },
+    {
+        "id": "a5cf753f.b69258",
+        "type": "debug",
+        "z": "1044921f.e283de",
+        "name": "",
+        "active": true,
+        "console": "false",
+        "complete": "true",
+        "x": 618.9000091552734,
+        "y": 305.40000915527344,
+        "wires": []
+    },
+    {
+        "id": "d2a9dab2.5db438",
+        "type": "ui_group",
+        "z": "1044921f.e283de",
+        "name": "Simulation-Dashboard",
+        "tab": "45fcbd24.93e844",
+        "disp": true,
+        "width": "20"
+    },
+    {
+        "id": "45fcbd24.93e844",
+        "type": "ui_tab",
+        "z": "1044921f.e283de",
+        "name": "Simulation",
+        "icon": "dashboard",
+        "order": 1
+    }
 ]
