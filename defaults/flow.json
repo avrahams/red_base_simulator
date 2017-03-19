@@ -9,15 +9,14 @@
         "type": "function",
         "z": "1044921f.e283de",
         "name": "update flow context with device changes",
-        "func": "var simulation = flow.get(\"simulation\") || {};\nswitch (msg.topic) {\ncase \"deviceSchema\":\n\tif(Array.isArray(msg.payload)){\n\t\t//all schemas update on startup clean old context \n\t\tsimulation = {};\n\t}\n\telse{//single schema update while running\n\t\tmsg.payload = [msg.payload];\n\n\t}\n\t//update schemas\n\tfor (var i = 0; i < msg.payload.length; i++) {\n\t\tvar schema = msg.payload[i];\n\t\tsimulation[schema.deviceType] = {schema: schema, devices: {}};\n\t}\n\tbreak;\ncase \"deviceCreated\":\n\tvar device = {properties: msg.payload.properties, isOn: true};\n\t//set properties input types\n\tdevice.propertiesInput = {};\n\tfor(var k in device.properties){\n\t\tvar prpType = typeof(device.properties[k]);\n\t\tvar inputType = (prpType === \"number\") ? \"number\": (prpType === \"boolean\") ? \"checkbox\" : \"text\";\n\t\tdevice.propertiesInput[k] = inputType;\n\t}\n\tsimulation[msg.payload.deviceType].devices[msg.payload.deviceId] = device;\n\tbreak;\ncase \"deviceDeleted\":\n\tvar device = msg.payload;\n\tif(simulation[device.deviceType].devices[device.deviceId]){\n\t\tsimulation[device.deviceType].devices[device.deviceId].isOn = false;\n\t}\n\telse\n\t\treturn null; //device already deleted\n\tbreak;\ncase \"propertyChange\":\n\tvar device = msg.payload;\n\tvar changedProperty = device.changedProperty;\n\tsimulation[device.deviceType].devices[device.deviceId].properties[changedProperty.name] = changedProperty.newValue;\n\tbreak;\ndefault:\n\treturn null;\n}\nflow.set(\"simulation\", simulation);\nmsg.payload = simulation;\nreturn msg;\n",
+        "func": "var simulation = flow.get(\"simulation\") || {};\nswitch (msg.topic) {\ncase \"deviceSchema\":\n\tif(Array.isArray(msg.payload)){\n\t\t//all schemas update on startup clean old context \n\t\tsimulation = {};\n\t}\n\telse{//single schema update while running\n\t\tmsg.payload = [msg.payload];\n\n\t}\n\t//update schemas\n\tfor (var i = 0; i < msg.payload.length; i++) {\n\t\tvar schema = msg.payload[i];\n\t\tsimulation[schema.deviceType] = {schema: schema, devices: {}};\n\t}\n\tbreak;\n\tcase \"propertyChange\":\n\tvar device = msg.payload;\n\tvar changedProperty = device.changedProperty;\n\tif(simulation[device.deviceType].devices[device.deviceId]){\n\t    simulation[device.deviceType].devices[device.deviceId].properties[changedProperty.name] = changedProperty.newValue;\n\t}\n\telse{\n\t    \n\t    var device = {properties: msg.payload.properties, isOn: true};\n\t    //set properties input types\n\t    device.propertiesInput = {};\n\t    for(var k in device.properties){\n\t        var prpType = typeof(device.properties[k]);\n\t        var inputType = (prpType === \"number\") ? \"number\": (prpType === \"boolean\") ? \"checkbox\" : \"text\";\n\t        device.propertiesInput[k] = inputType;\n\t   }\n\t   simulation[msg.payload.deviceType].devices[msg.payload.deviceId] = device;\n\t}\n\tbreak;//else continue\ncase \"deviceCreated\":\n\tvar device = {properties: msg.payload.properties, isOn: true};\n\t//set properties input types\n\tdevice.propertiesInput = {};\n\tfor(var k in device.properties){\n\t\tvar prpType = typeof(device.properties[k]);\n\t\tvar inputType = (prpType === \"number\") ? \"number\": (prpType === \"boolean\") ? \"checkbox\" : \"text\";\n\t\tdevice.propertiesInput[k] = inputType;\n\t}\n\tsimulation[msg.payload.deviceType].devices[msg.payload.deviceId] = device;\n\tbreak;\ncase \"deviceDeleted\":\n\tvar device = msg.payload;\n\tif(simulation[device.deviceType].devices[device.deviceId]){\n\t\tsimulation[device.deviceType].devices[device.deviceId].isOn = false;\n\t}\n\telse\n\t\treturn null; //device already deleted\n\tbreak;\ndefault:\n\treturn null;\n}\nflow.set(\"simulation\", simulation);\nmsg.payload = simulation;\nreturn msg;\n",
         "outputs": 1,
         "noerr": 0,
         "x": 732,
         "y": 377.142822265625,
         "wires": [
             [
-                "c053d47c.dfdc18",
-                "a5cf753f.b69258"
+                "c053d47c.dfdc18"
             ]
         ]
     },
@@ -127,7 +126,8 @@
             "f0afb38d.c557c",
             "18a493df.0c35ac",
             "48b54775.b2ffa8",
-            "183deeeb.c180e1"
+            "183deeeb.c180e1",
+            "480898cf.8a66f8"
         ],
         "x": 905.9999389648438,
         "y": 236,
@@ -185,7 +185,8 @@
             "df2a484f.8672a8",
             "68ef6fac.d3c95",
             "ccf54a54.1076b8",
-            "8b3b25df.71bc48"
+            "8b3b25df.71bc48",
+            "60e94043.3fc35"
         ],
         "x": 896.7142333984375,
         "y": 165,
@@ -272,8 +273,7 @@
         "y": 375.42852783203125,
         "wires": [
             [
-                "a159b455.1a33a8",
-                "a5cf753f.b69258"
+                "a159b455.1a33a8"
             ]
         ]
     },
@@ -652,18 +652,6 @@
                 "4af54c13.d33ea4"
             ]
         ]
-    },
-    {
-        "id": "a5cf753f.b69258",
-        "type": "debug",
-        "z": "1044921f.e283de",
-        "name": "",
-        "active": true,
-        "console": "false",
-        "complete": "true",
-        "x": 618.9000091552734,
-        "y": 305.40000915527344,
-        "wires": []
     },
     {
         "id": "d2a9dab2.5db438",
