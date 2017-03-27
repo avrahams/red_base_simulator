@@ -75,14 +75,14 @@ var settings = {
 // Not used in embedded mode: uiHost, uiPort, httpAdminAuth, httpNodeAuth, httpStatic, httpStaticAuth, https
 
 // Check to see if Cloudant service exists
-settings.couchAppname = VCAP_APPLICATION['application_name'];
+settings.couchAppname = VCAP_APPLICATION.application_name;
 
 if (process.env.VCAP_SERVICES) {
 // Running on Bluemix. Parse the port and host that we've been assigned.
     var env = JSON.parse(process.env.VCAP_SERVICES);
     console.log('VCAP_SERVICES: %s', process.env.VCAP_SERVICES);
     // Also parse Cloudant settings.
-    var couchService = env['cloudantNoSQLDB'][0]['credentials'];
+    var couchService = env.cloudantNoSQLDB[0].credentials;
 }
 
 if (!couchService) {
